@@ -2,6 +2,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 import json
+from datetime import datetime
 
 def get_sheet():
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -14,6 +15,16 @@ def get_sheet():
     sheet = client.open("israel sheet").sheet1  # must match your actual Sheet name
     return sheet
 
-def log_conversation(user_message, ai_reply):
+def log_order(name, phone_number, address, product_ordered, quantity, email="", status="New Order"):
     sheet = get_sheet()
-    sheet.append_row([user_message, ai_reply])
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sheet.append_row([
+        timestamp,
+        name,
+        phone_number,
+        address,
+        email,
+        product_ordered,
+        quantity,
+        status
+    ])
