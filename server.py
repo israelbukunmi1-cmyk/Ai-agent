@@ -7,7 +7,7 @@ import json
 
 from knowledge_base import SYSTEM_PROMPT
 from email_helper import send_email
-from sheets_helper import log_conversation
+from sheets_helper import log_order
 from calendar_helper import book_appointment
 
 app = FastAPI()
@@ -20,7 +20,6 @@ app.add_middleware(
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# Define the tools (functions) the AI is allowed to call
 tools = [
     {
         "type": "function",
@@ -37,6 +36,25 @@ tools = [
                 "required": ["date", "time", "customer_name"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "place_order",
+            "description": "Log a customer's order once they provide their details and what they want to buy",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Customer's name"},
+                    "phone_number": {"type": "string", "description": "Customer's phone number"},
+                    "address": {"type": "string", "description": "Delivery address"},
+                    "product_ordered": {"type": "string", "description": "The product(s) the customer wants to order"},
+                    "quantity": {"type": "string", "description": "Quantity of the product ordered"},
+                    "email": {"type": "string", "description": "Customer's email address, if provided"}
+                },
+                "required": ["name", "phone_number", "address", "product_ordered", "quantity"]
+            }
+        }
     }
 ]
 
@@ -50,7 +68,6 @@ def chat(request: ChatRequest):
         {"role": "user", "content": request.message}
     ]
 
-    # Step 1: Ask the AI - it might reply normally, or ask to call a tool
     response = client.chat.completions.create(
         model="openai/gpt-oss-120b",
         messages=messages,
@@ -59,7 +76,6 @@ def chat(request: ChatRequest):
 
     ai_message = response.choices[0].message
 
-    # Step 2: Check if the AI wants to call a tool
     if ai_message.tool_calls:
         tool_call = ai_message.tool_calls[0]
         args = json.loads(tool_call.function.arguments)
@@ -71,18 +87,23 @@ def chat(request: ChatRequest):
                 customer_name=args["customer_name"]
             )
             final_reply = f"You're booked, {args['customer_name']}! Here's your event: {calendar_link}"
+
+        elif tool_call.function.name == "place_order":
+            log_order(
+                name=args["name"],
+                phone_number=args["phone_number"],
+                address=args["address"],
+                product_ordered=args["product_ordered"],
+                quantity=args["quantity"],
+                email=args.get("email", "")
+            )
+            final_reply = f"Thanks {args['name']}! Your order for {args['quantity']} x {args['product_ordered']} has been received. We'll contact you at {args['phone_number']} to confirm delivery."
+
         else:
             final_reply = "Sorry, I couldn't complete that action."
     else:
         final_reply = ai_message.content
 
-    # Step 3: Log the conversation to Sheets
-    try:
-        log_conversation(request.message, final_reply)
-    except Exception as e:
-        print(f"Sheets logging failed: {e}")
-
-    # Step 4: Email yourself if the AI couldn't answer something
     if "I don't have that information" in final_reply:
         try:
             send_email(
