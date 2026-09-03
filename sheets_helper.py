@@ -5,7 +5,10 @@ import json
 from datetime import datetime
 
 def get_sheet():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
     
     creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     creds_dict = json.loads(creds_json)
