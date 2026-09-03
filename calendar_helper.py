@@ -26,5 +26,5 @@ def book_appointment(date, time, customer_name):
         "end": {"dateTime": end_datetime, "timeZone": "Africa/Lagos"},
     }
 
-    created_event = service.events().insert(calendarId="primary", body=event).execute()
+  created_event = service.events().insert(calendarId="israelbukunmi1@gmail.com", body=event).execute()
     return created_event.get("htmlLink")
