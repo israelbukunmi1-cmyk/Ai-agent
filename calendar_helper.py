@@ -13,7 +13,7 @@ def get_calendar_service():
 
 def book_appointment(date, time, customer_name):
     service = get_calendar_service()
-    
+
     start_datetime = f"{date}T{time}:00"
     hour, minute = map(int, time.split(":"))
     end_hour = hour if minute < 30 else hour + 1
