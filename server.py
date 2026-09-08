@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from groq import Groq
 import os
 import json
+import requests
 
 from knowledge_base import SYSTEM_PROMPT
 from email_helper import send_email
@@ -19,6 +21,10 @@ app.add_middleware(
 )
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN")
 
 tools = [
     {
@@ -58,14 +64,11 @@ tools = [
     }
 ]
 
-class ChatRequest(BaseModel):
-    message: str
 
-@app.post("/chat")
-def chat(request: ChatRequest):
+def get_ai_reply(user_message: str) -> str:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": request.message}
+        {"role": "user", "content": user_message}
     ]
 
     response = client.chat.completions.create(
@@ -108,10 +111,72 @@ def chat(request: ChatRequest):
         try:
             send_email(
                 subject="Unanswered customer question",
-                body=f"Customer asked: {request.message}",
+                body=f"Customer asked: {user_message}",
                 to_email=os.environ.get("NOTIFY_EMAIL")
             )
         except Exception as e:
             print(f"Email failed: {e}")
 
-    return {"reply": final_reply}
+    return final_reply
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+    reply = get_ai_reply(request.message)
+    return {"reply": reply}
+
+
+def send_whatsapp_message(to_number: str, message_text: str):
+    url = f"https://graph.facebook.com/v25.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "text",
+        "text": {"body": message_text}
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    print("WhatsApp send response:", response.status_code, response.text)
+
+
+@app.get("/whatsapp-webhook")
+def verify_whatsapp_webhook(request: Request):
+    params = request.query_params
+    mode = params.get("hub.mode")
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+
+    if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
+        return PlainTextResponse(content=challenge, status_code=200)
+    return PlainTextResponse(content="Verification failed", status_code=403)
+
+
+@app.post("/whatsapp-webhook")
+async def receive_whatsapp_message(request: Request):
+    data = await request.json()
+    print("Incoming WhatsApp payload:", json.dumps(data))
+
+    try:
+        entry = data["entry"][0]
+        changes = entry["changes"][0]
+        value = changes["value"]
+
+        if "messages" in value:
+            message_data = value["messages"][0]
+            from_number = message_data["from"]
+            user_text = message_data["text"]["body"]
+
+            reply = get_ai_reply(user_text)
+            send_whatsapp_message(from_number, reply)
+
+    except (KeyError, IndexError) as e:
+        print(f"No message content to process: {e}")
+
+    return {"status": "received"}
