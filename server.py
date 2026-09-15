@@ -89,6 +89,22 @@ def get_ai_reply(user_message: str) -> str:
                 time=args["time"],
                 customer_name=args["customer_name"]
             )
+
+            try:
+                send_email(
+                    subject=f"New appointment booked - {args['customer_name']}",
+                    body=(
+                        f"New appointment booked!\n\n"
+                        f"Customer: {args['customer_name']}\n"
+                        f"Date: {args['date']}\n"
+                        f"Time: {args['time']}\n"
+                        f"Calendar link: {calendar_link}"
+                    ),
+                    to_email=os.environ.get("NOTIFY_EMAIL")
+                )
+            except Exception as e:
+                print(f"Appointment email failed: {e}")
+
             final_reply = f"You're booked, {args['customer_name']}! Here's your event: {calendar_link}"
 
         elif tool_call.function.name == "place_order":
