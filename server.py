@@ -80,64 +80,68 @@ def get_ai_reply(user_message: str) -> str:
     ai_message = response.choices[0].message
 
     if ai_message.tool_calls:
-        tool_call = ai_message.tool_calls[0]
-        args = json.loads(tool_call.function.arguments)
+        reply_parts = []
 
-        if tool_call.function.name == "book_appointment":
-            calendar_link = book_appointment(
-                date=args["date"],
-                time=args["time"],
-                customer_name=args["customer_name"]
-            )
+        for tool_call in ai_message.tool_calls:
+            args = json.loads(tool_call.function.arguments)
 
-            try:
-                send_email(
-                    subject=f"New appointment booked - {args['customer_name']}",
-                    body=(
-                        f"New appointment booked!\n\n"
-                        f"Customer: {args['customer_name']}\n"
-                        f"Date: {args['date']}\n"
-                        f"Time: {args['time']}\n"
-                        f"Calendar link: {calendar_link}"
-                    ),
-                    to_email=os.environ.get("NOTIFY_EMAIL")
+            if tool_call.function.name == "book_appointment":
+                calendar_link = book_appointment(
+                    date=args["date"],
+                    time=args["time"],
+                    customer_name=args["customer_name"]
                 )
-            except Exception as e:
-                print(f"Appointment email failed: {e}")
 
-            final_reply = f"You're booked, {args['customer_name']}! Here's your event: {calendar_link}"
+                try:
+                    send_email(
+                        subject=f"New appointment booked - {args['customer_name']}",
+                        body=(
+                            f"New appointment booked!\n\n"
+                            f"Customer: {args['customer_name']}\n"
+                            f"Date: {args['date']}\n"
+                            f"Time: {args['time']}\n"
+                            f"Calendar link: {calendar_link}"
+                        ),
+                        to_email=os.environ.get("NOTIFY_EMAIL")
+                    )
+                except Exception as e:
+                    print(f"Appointment email failed: {e}")
 
-        elif tool_call.function.name == "place_order":
-            log_order(
-                name=args["name"],
-                phone_number=args["phone_number"],
-                address=args["address"],
-                product_ordered=args["product_ordered"],
-                quantity=args["quantity"],
-                email=args.get("email", "")
-            )
+                reply_parts.append(f"You're booked, {args['customer_name']}! Here's your event: {calendar_link}")
 
-            try:
-                send_email(
-                    subject=f"New order from {args['name']}",
-                    body=(
-                        f"New order received!\n\n"
-                        f"Name: {args['name']}\n"
-                        f"Phone: {args['phone_number']}\n"
-                        f"Address: {args['address']}\n"
-                        f"Product: {args['product_ordered']}\n"
-                        f"Quantity: {args['quantity']}\n"
-                        f"Email: {args.get('email', 'Not provided')}"
-                    ),
-                    to_email=os.environ.get("NOTIFY_EMAIL")
+            elif tool_call.function.name == "place_order":
+                log_order(
+                    name=args["name"],
+                    phone_number=args["phone_number"],
+                    address=args["address"],
+                    product_ordered=args["product_ordered"],
+                    quantity=args["quantity"],
+                    email=args.get("email", "")
                 )
-            except Exception as e:
-                print(f"Order email failed: {e}")
 
-            final_reply = f"Thanks {args['name']}! Your order for {args['quantity']} x {args['product_ordered']} has been received. We'll contact you at {args['phone_number']} to confirm delivery."
+                try:
+                    send_email(
+                        subject=f"New order from {args['name']}",
+                        body=(
+                            f"New order received!\n\n"
+                            f"Name: {args['name']}\n"
+                            f"Phone: {args['phone_number']}\n"
+                            f"Address: {args['address']}\n"
+                            f"Product: {args['product_ordered']}\n"
+                            f"Quantity: {args['quantity']}\n"
+                            f"Email: {args.get('email', 'Not provided')}"
+                        ),
+                        to_email=os.environ.get("NOTIFY_EMAIL")
+                    )
+                except Exception as e:
+                    print(f"Order email failed: {e}")
 
-        else:
-            final_reply = "Sorry, I couldn't complete that action."
+                reply_parts.append(f"Thanks {args['name']}! Your order for {args['quantity']} x {args['product_ordered']} has been received. We'll contact you at {args['phone_number']} to confirm delivery.")
+
+            else:
+                reply_parts.append("Sorry, I couldn't complete that action.")
+
+        final_reply = " ".join(reply_parts)
     else:
         final_reply = ai_message.content
 
