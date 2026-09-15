@@ -100,6 +100,24 @@ def get_ai_reply(user_message: str) -> str:
                 quantity=args["quantity"],
                 email=args.get("email", "")
             )
+
+            try:
+                send_email(
+                    subject=f"New order from {args['name']}",
+                    body=(
+                        f"New order received!\n\n"
+                        f"Name: {args['name']}\n"
+                        f"Phone: {args['phone_number']}\n"
+                        f"Address: {args['address']}\n"
+                        f"Product: {args['product_ordered']}\n"
+                        f"Quantity: {args['quantity']}\n"
+                        f"Email: {args.get('email', 'Not provided')}"
+                    ),
+                    to_email=os.environ.get("NOTIFY_EMAIL")
+                )
+            except Exception as e:
+                print(f"Order email failed: {e}")
+
             final_reply = f"Thanks {args['name']}! Your order for {args['quantity']} x {args['product_ordered']} has been received. We'll contact you at {args['phone_number']} to confirm delivery."
 
         else:
