@@ -56,7 +56,7 @@ tools = [
                     "address": {"type": "string", "description": "Delivery address"},
                     "product_ordered": {"type": "string", "description": "The product(s) the customer wants to order"},
                     "quantity": {"type": "string", "description": "Quantity of the product ordered"},
-                    "email": {"type": "string", "description": "Customer's email address, if provided"}
+                    "email": {"type": ["string", "null"], "description": "Customer's email address. Use null if not given."}
                 },
                 "required": ["name", "phone_number", "address", "product_ordered", "quantity"]
             }
@@ -134,7 +134,7 @@ def get_ai_reply(user_message: str) -> str:
                     address=args["address"],
                     product_ordered=args["product_ordered"],
                     quantity=args["quantity"],
-                    email=args.get("email", "")
+                    email=args.get("email") or ""
                 )
 
                 try:
@@ -147,7 +147,7 @@ def get_ai_reply(user_message: str) -> str:
                             f"Address: {args['address']}\n"
                             f"Product: {args['product_ordered']}\n"
                             f"Quantity: {args['quantity']}\n"
-                            f"Email: {args.get('email', 'Not provided')}"
+                            f"Email: {args.get('email') or 'Not provided'}"
                         ),
                         to_email=os.environ.get("NOTIFY_EMAIL")
                     )
