@@ -71,19 +71,37 @@ def get_ai_reply(user_message: str) -> str:
         {"role": "user", "content": user_message}
     ]
 
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=messages,
-        tools=tools
-    )
+    max_turns = 5
+    final_reply = "Sorry, I couldn't fully complete that request."
 
-    ai_message = response.choices[0].message
+    for _ in range(max_turns):
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=messages,
+            tools=tools
+        )
 
-    if ai_message.tool_calls:
-        reply_parts = []
+        ai_message = response.choices[0].message
+
+        if not ai_message.tool_calls:
+            final_reply = ai_message.content
+            break
+
+        messages.append({
+            "role": "assistant",
+            "content": ai_message.content,
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                } for tc in ai_message.tool_calls
+            ]
+        })
 
         for tool_call in ai_message.tool_calls:
             args = json.loads(tool_call.function.arguments)
+            tool_result = ""
 
             if tool_call.function.name == "book_appointment":
                 calendar_link = book_appointment(
@@ -107,7 +125,7 @@ def get_ai_reply(user_message: str) -> str:
                 except Exception as e:
                     print(f"Appointment email failed: {e}")
 
-                reply_parts.append(f"You're booked, {args['customer_name']}! Here's your event: {calendar_link}")
+                tool_result = f"Appointment booked for {args['customer_name']} on {args['date']} at {args['time']}. Calendar link: {calendar_link}"
 
             elif tool_call.function.name == "place_order":
                 log_order(
@@ -136,14 +154,16 @@ def get_ai_reply(user_message: str) -> str:
                 except Exception as e:
                     print(f"Order email failed: {e}")
 
-                reply_parts.append(f"Thanks {args['name']}! Your order for {args['quantity']} x {args['product_ordered']} has been received. We'll contact you at {args['phone_number']} to confirm delivery.")
+                tool_result = f"Order logged for {args['name']}: {args['quantity']} x {args['product_ordered']}."
 
             else:
-                reply_parts.append("Sorry, I couldn't complete that action.")
+                tool_result = "Unknown action requested."
 
-        final_reply = " ".join(reply_parts)
-    else:
-        final_reply = ai_message.content
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": tool_result
+            })
 
     if "I don't have that information" in final_reply:
         try:
